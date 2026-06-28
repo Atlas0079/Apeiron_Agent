@@ -1,1 +1,5 @@
 pi-mono/
+node_modules/
+dist/
+*.tsbuildinfo
+.tmp-smoke/

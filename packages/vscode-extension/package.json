@@ -1,0 +1,86 @@
+{
+  "name": "@apeiron/vscode-extension",
+  "displayName": "Apeiron",
+  "description": "Project memory and context preparation agent for VS Code.",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/extension.js",
+  "engines": {
+    "vscode": "^1.102.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onCommand:apeiron.openChat",
+    "onCommand:apeiron.init",
+    "onCommand:apeiron.scan",
+    "onCommand:apeiron.context",
+    "onCommand:apeiron.refreshPlan",
+    "onCommand:apeiron.refresh",
+    "onCommand:apeiron.warmupLlm",
+    "onCommand:apeiron.refreshLlm",
+    "onCommand:apeiron.workRunLlm",
+    "onCommand:apeiron.gitStatus",
+    "onCommand:apeiron.gitRefreshTargets"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "apeiron.openChat",
+        "title": "Apeiron: Open Chat"
+      },
+      {
+        "command": "apeiron.init",
+        "title": "Apeiron: Init"
+      },
+      {
+        "command": "apeiron.scan",
+        "title": "Apeiron: Scan"
+      },
+      {
+        "command": "apeiron.context",
+        "title": "Apeiron: Create Context Pack"
+      },
+      {
+        "command": "apeiron.refreshPlan",
+        "title": "Apeiron: Create Refresh Plan"
+      },
+      {
+        "command": "apeiron.refresh",
+        "title": "Apeiron: Refresh"
+      },
+      {
+        "command": "apeiron.warmupLlm",
+        "title": "Apeiron: Warmup LLM"
+      },
+      {
+        "command": "apeiron.refreshLlm",
+        "title": "Apeiron: Refresh LLM"
+      },
+      {
+        "command": "apeiron.workRunLlm",
+        "title": "Apeiron: Work Run LLM"
+      },
+      {
+        "command": "apeiron.gitStatus",
+        "title": "Apeiron: Git Status"
+      },
+      {
+        "command": "apeiron.gitRefreshTargets",
+        "title": "Apeiron: Git Refresh Targets"
+      }
+    ]
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check": "tsc -p tsconfig.json --pretty false"
+  },
+  "dependencies": {
+    "@apeiron/core": "0.0.0"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.102.0"
+  }
+}
