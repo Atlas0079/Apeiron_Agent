@@ -26,6 +26,7 @@ export * from "./llm/pi-ai-provider.js";
 export * from "./llm/provider.js";
 export * from "./llm/openai-compatible.js";
 export * from "./repo/file-list.js";
+export * from "./repo/focus.js";
 export * from "./repo/git.js";
 export * from "./repo/hash.js";
 export * from "./repo/path.js";

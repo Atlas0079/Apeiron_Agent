@@ -1,7 +1,6 @@
 import { createPiAiClient } from "../llm/pi-ai-provider.js";
 import {
-  completeWithRetry,
-  extractJsonObject,
+  completeJsonWithRetry,
   readApeironLlmEnv,
   type ApeironLlmMessage,
   type ApeironLlmOptions,
@@ -52,6 +51,8 @@ type MemoryAgentAction = { commentary?: string } & (
   | { action: "append_memory_fact"; fact: string }
   | { action: "update_inventory_entry"; path: string; patch: Record<string, unknown> }
   | { action: "mark_file_ignored"; path: string; reason: string }
+  | { action: "mark_files_ignored"; paths: string[]; reason: string }
+  | { action: "ignore_extensions"; extensions: string[]; reason: string }
   | { action: "finish"; result: unknown }
 );
 
@@ -71,10 +72,9 @@ export async function runMemoryAgent<TFinish = unknown>(input: MemoryAgentRunInp
 
   for (let turn = 0; turn < (input.maxTurns ?? 20); turn += 1) {
     throwIfAborted(input.abortSignal);
-    const raw = await completeWithRetry(client, messages, { ...input.llmOptions, maxTokens: 6000 }, input.onLlmRetry);
+    const { raw, parsed: action } = await completeJsonWithRetry<MemoryAgentAction>(client, messages, { ...input.llmOptions, maxTokens: 6000 }, input.onLlmRetry);
     throwIfAborted(input.abortSignal);
     messages.push({ role: "assistant", content: raw });
-    const action = extractJsonObject<MemoryAgentAction>(raw);
     emitCommentary(input.onCommentary, action.commentary);
     if (action.action === "finish") {
       const audit = input.audit ? await input.audit({ events: tools.events, finish: action.result }) : undefined;
@@ -107,9 +107,8 @@ export async function runMemoryAgent<TFinish = unknown>(input: MemoryAgentRunInp
     role: "user",
     content: "Maximum memory-agent turns reached. Return a finish action now with checked, updated, blocked, and any remaining work."
   });
-  const raw = await completeWithRetry(client, messages, { ...input.llmOptions, maxTokens: 4000 }, input.onLlmRetry);
+  const { raw, parsed: action } = await completeJsonWithRetry<MemoryAgentAction>(client, messages, { ...input.llmOptions, maxTokens: 4000 }, input.onLlmRetry);
   throwIfAborted(input.abortSignal);
-  const action = extractJsonObject<MemoryAgentAction>(raw);
   emitCommentary(input.onCommentary, action.commentary);
   if (action.action !== "finish") {
     throw new Error("Memory agent reached maxTurns and finalization did not return finish");
@@ -143,6 +142,8 @@ function buildInitialPrompt(task: unknown): string {
         append_memory_fact: { action: "append_memory_fact", fact: "long-term maintenance fact" },
         update_inventory_entry: { action: "update_inventory_entry", path: "repo/path.ts", patch: { status: "documented" } },
         mark_file_ignored: { action: "mark_file_ignored", path: "repo/path", reason: "why this is long-term ignorable" },
+        mark_files_ignored: { action: "mark_files_ignored", paths: ["repo/path.log", "generated/file.ts"], reason: "why these files have no long-term maintenance value" },
+        ignore_extensions: { action: "ignore_extensions", extensions: [".png", ".log"], reason: "why this file type should stay outside Apeiron memory" },
         finish: { action: "finish", result: {} }
       },
       task
@@ -188,6 +189,10 @@ async function executeMemoryAction(tools: MemoryAgentTools, action: MemoryAgentA
       return await tools.updateInventoryEntry(action.path, action.patch);
     case "mark_file_ignored":
       return await tools.markFileIgnored(action.path, action.reason);
+    case "mark_files_ignored":
+      return await tools.markFilesIgnored(action.paths, action.reason);
+    case "ignore_extensions":
+      return await tools.ignoreExtensions(action.extensions, action.reason);
     default:
       return { ok: false, error: "unsupported memory action" };
   }

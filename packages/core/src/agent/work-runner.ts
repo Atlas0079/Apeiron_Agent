@@ -1,7 +1,6 @@
 import { createPiAiClient } from "../llm/pi-ai-provider.js";
 import {
-  completeWithRetry,
-  extractJsonObject,
+  completeJsonWithRetry,
   readApeironLlmEnv,
   type ApeironLlmMessage,
   type ApeironLlmOptions,
@@ -170,10 +169,9 @@ export async function runLlmWork(input: WorkRunInput): Promise<WorkRunResult> {
   for (let turn = 0; turn < (input.maxTurns ?? 12); turn += 1) {
     throwIfAborted(input.abortSignal);
     appendLiveInputs(messages, input.liveInputQueue?.drain() ?? []);
-    const raw = await completeWithRetry(client, messages, { ...input.llmOptions, maxTokens: 6000 }, input.onLlmRetry);
+    const { raw, parsed: action } = await completeJsonWithRetry<WorkAction>(client, messages, { ...input.llmOptions, maxTokens: 6000 }, input.onLlmRetry);
     throwIfAborted(input.abortSignal);
     messages.push({ role: "assistant", content: raw });
-    const action = extractJsonObject<WorkAction>(raw);
     emitCommentary(input.onCommentary, action.commentary);
     if (action.action === "final") {
       return await finalizeWorkRun({
@@ -205,9 +203,8 @@ export async function runLlmWork(input: WorkRunInput): Promise<WorkRunResult> {
     role: "user",
     content: "Maximum tool turns reached. Return a final JSON action now: {\"action\":\"final\",\"answer\":\"...\"}."
   });
-  const raw = await completeWithRetry(client, messages, { ...input.llmOptions, maxTokens: 3000 }, input.onLlmRetry);
+  const { raw, parsed: action } = await completeJsonWithRetry<WorkAction>(client, messages, { ...input.llmOptions, maxTokens: 3000 }, input.onLlmRetry);
   throwIfAborted(input.abortSignal);
-  const action = extractJsonObject<WorkAction>(raw);
   emitCommentary(input.onCommentary, action.commentary);
   if (action.action !== "final") {
     throw new Error("Work loop reached maxTurns and finalization did not return final action");

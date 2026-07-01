@@ -4,6 +4,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import type { RefreshTarget } from "../memory/refresh-targets.js";
 import { decideIgnored, loadIgnoreRules } from "../memory/ignore.js";
+import { isApeironDefaultFocusedFile } from "./focus.js";
 import { normalizeRepoPath } from "./path.js";
 
 const execFileAsync = promisify(execFile);
@@ -142,7 +143,7 @@ export function createRefreshTargetsFromGitStatusSync(status: GitStatus): Refres
 
 function isIgnoredRefreshPath(repoPath: string, rules: Awaited<ReturnType<typeof loadIgnoreRules>>): boolean {
   const normalized = normalizeRepoPath(repoPath);
-  return normalized.startsWith(".apeiron/") || decideIgnored(normalized, rules).ignored;
+  return normalized.startsWith(".apeiron/") || !isApeironDefaultFocusedFile(normalized) || decideIgnored(normalized, rules).ignored;
 }
 
 function parsePorcelainLine(line: string): GitChange {
@@ -210,7 +211,7 @@ async function expandMaybeDirectory(workspaceRoot: string, repoPath: string): Pr
   }
   const files: string[] = [];
   await walkDirectory(workspaceRoot, absolutePath, files);
-  return files.filter((file) => !file.startsWith(".apeiron/")).sort();
+  return files.filter((file) => !file.startsWith(".apeiron/") && isApeironDefaultFocusedFile(file)).sort();
 }
 
 async function walkDirectory(workspaceRoot: string, absoluteDir: string, files: string[]): Promise<void> {

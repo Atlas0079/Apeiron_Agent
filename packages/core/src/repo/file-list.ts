@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { decideIgnored, type IgnoreRule } from "../memory/ignore.js";
+import { isApeironDefaultFocusedFile } from "./focus.js";
 import { normalizeRepoPath } from "./path.js";
 
 export interface RepoFile {
@@ -12,16 +13,17 @@ export interface RepoFile {
 
 export interface ListRepoFilesOptions {
   ignoreRules?: IgnoreRule[];
+  focus?: "default" | "all";
 }
 
 export async function listRepoFiles(workspaceRoot: string, options: ListRepoFilesOptions = {}): Promise<RepoFile[]> {
   const root = path.resolve(workspaceRoot);
   const files: RepoFile[] = [];
-  await walk(root, "", files, options.ignoreRules ?? []);
+  await walk(root, "", files, options.ignoreRules ?? [], options.focus ?? "default");
   return files.sort((a, b) => a.path.localeCompare(b.path));
 }
 
-async function walk(root: string, repoDir: string, files: RepoFile[], ignoreRules: IgnoreRule[]): Promise<void> {
+async function walk(root: string, repoDir: string, files: RepoFile[], ignoreRules: IgnoreRule[], focus: ListRepoFilesOptions["focus"]): Promise<void> {
   const absoluteDir = path.join(root, ...repoDir.split("/").filter(Boolean));
   const entries = await fs.readdir(absoluteDir, { withFileTypes: true });
   for (const entry of entries) {
@@ -31,10 +33,13 @@ async function walk(root: string, repoDir: string, files: RepoFile[], ignoreRule
     }
     const absolutePath = path.join(absoluteDir, entry.name);
     if (entry.isDirectory()) {
-      await walk(root, repoPath, files, ignoreRules);
+      await walk(root, repoPath, files, ignoreRules, focus);
       continue;
     }
     if (!entry.isFile()) {
+      continue;
+    }
+    if (focus !== "all" && !isApeironDefaultFocusedFile(repoPath)) {
       continue;
     }
     const stat = await fs.stat(absolutePath);

@@ -191,6 +191,90 @@ export class MemoryAgentTools {
     });
   }
 
+  async markFilesIgnored(repoPaths: string[], reason: string): Promise<unknown> {
+    return await this.record("mark_files_ignored", { paths: repoPaths, reason }, async () => {
+      const normalizedReason = reason.trim();
+      if (!normalizedReason) {
+        throw new Error("mark_files_ignored requires a reason");
+      }
+      if (!Array.isArray(repoPaths) || repoPaths.length === 0) {
+        throw new Error("mark_files_ignored requires at least one path");
+      }
+      const inventory = await this.requireInventory();
+      const marked: Array<{ path: string; entry: InventoryEntry }> = [];
+      const failed: Array<{ path: string; error: string }> = [];
+      for (const repoPath of repoPaths) {
+        try {
+          const safePath = assertSafeRepoPath(repoPath);
+          const absolutePath = fromRepoPath(this.options.workspaceRoot, safePath);
+          const existing = inventory.files[safePath];
+          const hash = existsSync(absolutePath) ? await hashFileSha256(absolutePath) : null;
+          const entry = {
+            ...(existing ??
+              createDiscoveredEntry({
+                kind: classifyPath(safePath),
+                status: "unread",
+                purpose: `File discovered during memory agent run: ${safePath}`,
+                reason: "new-file-detected",
+                hash
+              })),
+            status: "ignored" as InventoryStatus,
+            reason: normalizedReason,
+            summaryRef: null,
+            purpose: `Ignored: ${normalizedReason}`,
+            hash,
+            lastRefreshAt: new Date().toISOString()
+          };
+          inventory.files[safePath] = entry;
+          marked.push({ path: safePath, entry });
+        } catch (error) {
+          failed.push({ path: String(repoPath), error: error instanceof Error ? error.message : String(error) });
+        }
+      }
+      await writeInventory(this.options.workspaceRoot, inventory);
+      return { marked, failed };
+    });
+  }
+
+  async ignoreExtensions(extensions: string[], reason: string): Promise<unknown> {
+    return await this.record("ignore_extensions", { extensions, reason }, async () => {
+      const normalizedReason = reason.trim();
+      if (!normalizedReason) {
+        throw new Error("ignore_extensions requires a reason");
+      }
+      if (!Array.isArray(extensions) || extensions.length === 0) {
+        throw new Error("ignore_extensions requires at least one extension");
+      }
+      const normalizedExtensions = Array.from(new Set(extensions.map(normalizeExtensionPattern).filter(Boolean))).sort();
+      if (normalizedExtensions.length === 0) {
+        throw new Error("ignore_extensions requires valid extensions");
+      }
+      const ignorePath = path.join(this.options.workspaceRoot, ".apeiron", "ignore.md");
+      const current = existsSync(ignorePath) ? await fs.readFile(ignorePath, "utf8") : "# Apeiron ignore rules\n\n# One pattern per line. These rules affect warmup and coverage scan.\n";
+      const existing = new Set(
+        current
+          .split(/\r?\n/)
+          .map((line) => line.trim())
+          .filter((line) => line && !line.startsWith("#"))
+      );
+      const added = normalizedExtensions.filter((pattern) => !existing.has(pattern));
+      if (added.length > 0) {
+        const block = [
+          "",
+          `# ${normalizedReason}`,
+          ...added
+        ].join("\n");
+        await fs.mkdir(path.dirname(ignorePath), { recursive: true });
+        await fs.writeFile(ignorePath, `${current.endsWith("\n") ? current.trimEnd() : current}${block}\n`, "utf8");
+      }
+      return {
+        added,
+        skipped: normalizedExtensions.filter((pattern) => existing.has(pattern)),
+        path: ".apeiron/ignore.md"
+      };
+    });
+  }
+
   private async requireInventory(): Promise<Inventory> {
     const inventory = await readInventory(this.options.workspaceRoot);
     if (!inventory) {
@@ -266,4 +350,16 @@ function normalizeFact(value: string): string {
     .trim()
     .replace(/^[-*]\s*/, "")
     .replace(/\s+/g, " ");
+}
+
+function normalizeExtensionPattern(value: string): string {
+  const trimmed = String(value ?? "").trim().toLowerCase();
+  if (!trimmed) {
+    return "";
+  }
+  const extension = trimmed.startsWith("*.") ? trimmed.slice(1) : trimmed.startsWith(".") ? trimmed : `.${trimmed}`;
+  if (!/^\.[a-z0-9][a-z0-9+-]*$/i.test(extension)) {
+    return "";
+  }
+  return `*${extension}`;
 }

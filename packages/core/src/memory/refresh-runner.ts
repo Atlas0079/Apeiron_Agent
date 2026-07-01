@@ -89,6 +89,8 @@ Hard rules:
 - Do not overwrite .apeiron/memory/MEMORY.md. Use append_memory_fact only for facts that will matter in future maintenance.
 - Do not write temporary task logs, command output, or guesses into memory.
 - documented/grouped inventory entries must have summaryRef.
+- You may mark clearly low-value files ignored without reading contents when path evidence is reliable. Prefer mark_files_ignored for batches, and always provide a concrete reason.
+- If a whole file extension should stay outside Apeiron memory, use ignore_extensions so future coverage scans skip it.
 - If a must-refresh target cannot be checked, include it in blocked with a concrete reason.
 
 Useful strategy:

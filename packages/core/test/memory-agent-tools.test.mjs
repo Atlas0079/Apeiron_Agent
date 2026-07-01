@@ -59,3 +59,56 @@ test("MemoryAgentTools updates lastReadAt and lastRefreshAt", async () => {
   const afterUpdate = await readInventory(workspaceRoot);
   assert.match(afterUpdate.files["src.ts"].lastRefreshAt, /^\d{4}-/);
 });
+
+test("MemoryAgentTools marks files ignored in batches", async () => {
+  const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), "apeiron-tools-"));
+  await fs.mkdir(path.join(workspaceRoot, "logs"), { recursive: true });
+  await fs.writeFile(path.join(workspaceRoot, "logs", "debug.log"), "debug\n", "utf8");
+  await fs.writeFile(path.join(workspaceRoot, "snapshot.png"), "not really an image\n", "utf8");
+  await writeInventory(
+    workspaceRoot,
+    inventory({
+      "logs/debug.log": entry(),
+      "snapshot.png": entry()
+    })
+  );
+
+  const tools = new MemoryAgentTools({ workspaceRoot });
+  const result = await tools.markFilesIgnored(
+    ["logs/debug.log", "snapshot.png"],
+    "runtime artifact with no long-term maintenance value"
+  );
+
+  assert.equal(result.marked.length, 2);
+  assert.equal(result.failed.length, 0);
+  const after = await readInventory(workspaceRoot);
+  assert.equal(after.files["logs/debug.log"].status, "ignored");
+  assert.equal(after.files["logs/debug.log"].reason, "runtime artifact with no long-term maintenance value");
+  assert.equal(after.files["logs/debug.log"].summaryRef, null);
+  assert.equal(after.files["snapshot.png"].status, "ignored");
+});
+
+test("MemoryAgentTools writes extension ignore rules without duplicates", async () => {
+  const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), "apeiron-tools-"));
+  await fs.mkdir(path.join(workspaceRoot, ".apeiron"), { recursive: true });
+  await fs.writeFile(
+    path.join(workspaceRoot, ".apeiron", "ignore.md"),
+    "# Apeiron ignore rules\n\n*.png\n",
+    "utf8"
+  );
+  await writeInventory(workspaceRoot, inventory({}));
+
+  const tools = new MemoryAgentTools({ workspaceRoot });
+  const result = await tools.ignoreExtensions(
+    [".png", "log", "*.zip"],
+    "Binary and runtime artifacts do not need long-term memory"
+  );
+
+  assert.deepEqual(result.added, ["*.log", "*.zip"]);
+  assert.deepEqual(result.skipped, ["*.png"]);
+  const ignoreFile = await fs.readFile(path.join(workspaceRoot, ".apeiron", "ignore.md"), "utf8");
+  assert.match(ignoreFile, /Binary and runtime artifacts/);
+  assert.equal((ignoreFile.match(/\*\.png/g) ?? []).length, 1);
+  assert.match(ignoreFile, /\*\.log/);
+  assert.match(ignoreFile, /\*\.zip/);
+});

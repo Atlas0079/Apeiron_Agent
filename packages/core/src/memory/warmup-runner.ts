@@ -187,6 +187,8 @@ Hard rules:
 - Do not write temporary task logs into memory.
 - MEMORY.md is append-only; use append_memory_fact only for long-term maintenance facts.
 - documented/grouped inventory entries must have summaryRef.
+- You may mark clearly low-value files ignored without reading contents when the path, extension, or directory makes the reason reliable. Prefer mark_files_ignored for batches, and always provide a concrete reason.
+- If a whole file extension should stay outside Apeiron memory, use ignore_extensions so future coverage scans skip it.
 - For scoped warmup, the user goal and optional scopeHints are not hard boundaries. You must infer the useful working scope by discussing the goal in your own reasoning, reading enough code to support it, and finishing with scopeRationale.
 - For scoped warmup, files outside the explored scope may remain unread, but they need a reason.
 - For full warmup, do not finish successfully while unignored files remain unread or without summaryRef.
@@ -200,6 +202,8 @@ Suggested strategy:
 5. Write PROJECT.md, MODULES.md, CONVENTIONS.md, TESTING.md as current-state memory.
 6. Write file or grouped module summaries for files you genuinely read and understand.
 7. Update inventory entries for documented/grouped/unread/ignored files.
+7a. Batch-ignore obvious noise such as logs, generated outputs, caches, binary snapshots, or vendor artifacts when the path evidence is sufficient.
+7b. Use ignore_extensions for repeated irrelevant file types rather than marking many individual files.
 8. Re-check coverage before finish.
 9. Finish with documentedFiles, writtenMemoryFiles, blocked entries, and for scoped warmup scopeRationale.`;
 

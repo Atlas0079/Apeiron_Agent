@@ -95,3 +95,33 @@ test("reconcileInventoryCoverage returns the writable inventory view", async () 
   assert.equal(reconciled.files["src.ts"].status, "unread");
   assert.equal(inventory.files["src.ts"], undefined);
 });
+
+test("inspectCoverage only tracks default focused project files", async () => {
+  const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), "apeiron-coverage-"));
+  await fs.mkdir(path.join(workspaceRoot, "src"), { recursive: true });
+  await fs.mkdir(path.join(workspaceRoot, "logs"), { recursive: true });
+  await fs.writeFile(path.join(workspaceRoot, "src", "app.ts"), "export const value = 1;\n", "utf8");
+  await fs.writeFile(path.join(workspaceRoot, "package.json"), "{\"type\":\"module\"}\n", "utf8");
+  await fs.writeFile(path.join(workspaceRoot, "logs", "debug.log"), "debug\n", "utf8");
+  await fs.writeFile(path.join(workspaceRoot, "hero.png"), "not really an image\n", "utf8");
+
+  const inventory = {
+    version: 1,
+    workspaceRoot: ".",
+    coverage: {
+      mode: "unknown",
+      scope: null,
+      createdAt: "2026-06-28T00:00:00.000Z",
+      lastFullWarmupAt: null
+    },
+    files: {}
+  };
+
+  const scan = await inspectCoverage(workspaceRoot, inventory);
+
+  assert.deepEqual(scan.issues.map((issue) => issue.path).sort(), ["package.json", "src/app.ts"]);
+  assert.equal(scan.reconciledInventory.files["src/app.ts"].status, "unread");
+  assert.equal(scan.reconciledInventory.files["package.json"].status, "unread");
+  assert.equal(scan.reconciledInventory.files["logs/debug.log"], undefined);
+  assert.equal(scan.reconciledInventory.files["hero.png"], undefined);
+});

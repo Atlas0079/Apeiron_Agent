@@ -82,6 +82,36 @@ export async function completeWithRetry(
   throw new Error("LLM retry loop ended unexpectedly");
 }
 
+export async function completeJsonWithRetry<T>(
+  client: ApeironLlmClient,
+  messages: ApeironLlmMessage[],
+  options: ApeironLlmOptions = {},
+  onRetry?: (event: ApeironLlmRetryEvent) => void
+): Promise<{ raw: string; parsed: T }> {
+  const raw = await completeWithRetry(
+    {
+      async complete(nextMessages, nextOptions) {
+        const text = await client.complete(nextMessages, nextOptions);
+        try {
+          return JSON.stringify({
+            raw: text,
+            parsed: extractJsonObject<T>(text)
+          });
+        } catch (error) {
+          if (isRetryableNonJsonResponse(text, error)) {
+            throw new Error(`LLM request failed: retryable non-JSON response: ${summarizeTextForError(text)}`);
+          }
+          throw error;
+        }
+      }
+    },
+    messages,
+    options,
+    onRetry
+  );
+  return JSON.parse(raw) as { raw: string; parsed: T };
+}
+
 export function extractJsonObject<T>(text: string): T {
   const fenced = /```(?:json)?\s*([\s\S]*?)```/i.exec(text);
   const candidate = fenced?.[1] ?? text;
@@ -91,6 +121,36 @@ export function extractJsonObject<T>(text: string): T {
     throw new Error("LLM response did not contain a JSON object");
   }
   return JSON.parse(candidate.slice(start, end + 1).replace(/^\uFEFF/, "")) as T;
+}
+
+function isRetryableNonJsonResponse(text: string, error: unknown): boolean {
+  const lower = text.toLowerCase();
+  if (looksLikeHtmlErrorPage(lower)) {
+    return true;
+  }
+  const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+  return message.includes("unexpected token") && (lower.includes("524") || lower.includes("timeout") || lower.includes("server"));
+}
+
+function looksLikeHtmlErrorPage(lowerText: string): boolean {
+  return (
+    lowerText.includes("<html") &&
+    (
+      lowerText.includes("524") ||
+      lowerText.includes("cloudflare") ||
+      lowerText.includes("无法连接到服务器") ||
+      lowerText.includes("cannot connect to server") ||
+      lowerText.includes("server error") ||
+      lowerText.includes("timeout")
+    )
+  );
+}
+
+function summarizeTextForError(text: string): string {
+  return text
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 500);
 }
 
 function parseReasoning(value: string | undefined): ApeironLlmOptions["reasoning"] {
@@ -105,6 +165,9 @@ function classifyLlmError(error: unknown): { category: string; message: string; 
   const lower = message.toLowerCase();
   if (lower.includes("missing apeiron_openai") || lower.includes("missing apeiron_model") || lower.includes("unsupported apeiron_model_api")) {
     return { category: "config", message, retryable: false };
+  }
+  if (lower.includes("llm response did not contain a json object")) {
+    return { category: "format", message, retryable: false };
   }
   if (lower.includes("401") || lower.includes("403") || lower.includes("unauthorized") || lower.includes("forbidden") || lower.includes("api key")) {
     return { category: "auth", message, retryable: false };
